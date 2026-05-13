@@ -214,27 +214,6 @@
                  btn.disabled = false;
              }
          };
-                
-                const data = await response.json();
-                if (!data.candidates || !data.candidates[0]) {
-                    throw new Error(data.error?.message || "Format respon AI berubah atau kuota habis.");
-                }
-                let aiText = data.candidates[0].content.parts[0].text;
-                aiText = aiText.replace(/```json|```/g, "").trim();
-                
-                const generated = JSON.parse(aiText);
-                questionsBuffer = [...questionsBuffer, ...generated];
-                document.getElementById('q-count').innerText = questionsBuffer.length;
-                alert("5 Soal Berhasil Dibuat!");
-        
-        } catch (e) {
-            console.error("Detail Error:", e);
-            alert("Gagal AI: " + e.message);
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
-        };
         // --- STUDENT LOGIC: LOAD & SUBMIT ---
         window.findExams = async () => {
             const teacherId = document.getElementById('student-teacher-id').value;
