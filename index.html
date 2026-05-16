@@ -1122,27 +1122,56 @@
             if (!tbody) return;
             tbody.innerHTML = '';
             allFileSubmissionsCache.forEach(sub => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b hover:bg-gray-50';
-                tr.innerHTML = `
-                    <td class="p-3 border border-gray-200 font-medium">${sub.studentName || '-'}</td>
-                    <td class="p-3 border border-gray-200">${sub.studentKelas || '-'}</td>
-                    <td class="p-3 border border-gray-200 text-xs">${sub.studentEmail || '-'}</td>
-                    <td class="p-3 border border-gray-200">${sub.subject || '-'}</td>
-                    <td class="p-3 border border-gray-200 text-sm">${sub.dateStr || ''}<br><span class="text-xs text-gray-400">${sub.timeStr || ''}</span></td>
-                    <td class="p-3 border border-gray-200">
-                        ${sub.fileData ? `<button onclick="viewFile('${sub.id}')" class="text-blue-600 underline text-xs">${sub.fileName || 'Lihat File'}</button>` : '-'}
-                    </td>
-                    <td class="p-3 border border-gray-200 text-xs">${sub.keterangan || '-'}</td>
-                    <td class="p-3 border border-gray-200">
-                        <input type="number" value="${sub.nilaiGuru || ''}" min="0" max="100" placeholder="0-100"
-                            class="w-16 p-1 border rounded text-sm" onchange="saveNilaiFile('${sub.id}', this.value)">
-                    </td>
-                    <td class="p-3 border border-gray-200">
-                        <button onclick="deleteFileSubmission('${sub.id}')" class="text-red-500 hover:text-red-700 text-xs"><i class="fas fa-trash"></i></button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
+                // Jika ada multiple files, buat 1 row per file
+                if (sub.files && Array.isArray(sub.files)) {
+                    sub.files.forEach((file, idx) => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b hover:bg-gray-50';
+                        tr.innerHTML = `
+                            <td class="p-3 border border-gray-200 font-medium">${sub.studentName || '-'}</td>
+                            <td class="p-3 border border-gray-200">${sub.studentKelas || '-'}</td>
+                            <td class="p-3 border border-gray-200 text-xs">${sub.studentEmail || '-'}</td>
+                            <td class="p-3 border border-gray-200">${sub.subject || '-'}</td>
+                            <td class="p-3 border border-gray-200 text-sm">${sub.dateStr || ''}<br><span class="text-xs text-gray-400">${sub.timeStr || ''}</span></td>
+                            <td class="p-3 border border-gray-200">
+                                <a href="${file.url}" class="text-blue-600 hover:underline text-sm font-medium">${file.name}</a>
+                            </td>
+                            <td class="p-3 border border-gray-200">
+                                <button onclick="previewFileModal('${file.url}', '${file.name}')" class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs mr-1" title="Lihat preview">
+                                    <i class="fas fa-eye"></i> Periksa
+                                </button>
+                                <button onclick="deleteFileRow('${sub.id}')" class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs" title="Hapus file">
+                                    <i class="fas fa-trash"></i> Hapus
+                                </button>
+                            </td>
+                            <td class="p-3 border border-gray-200">0-100</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else if (sub.fileData) {
+                    // Backward compatibility dengan format lama
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b hover:bg-gray-50';
+                    tr.innerHTML = `
+                        <td class="p-3 border border-gray-200 font-medium">${sub.studentName || '-'}</td>
+                        <td class="p-3 border border-gray-200">${sub.studentKelas || '-'}</td>
+                        <td class="p-3 border border-gray-200 text-xs">${sub.studentEmail || '-'}</td>
+                        <td class="p-3 border border-gray-200">${sub.subject || '-'}</td>
+                        <td class="p-3 border border-gray-200 text-sm">${sub.dateStr || ''}<br><span class="text-xs text-gray-400">${sub.timeStr || ''}</span></td>
+                        <td class="p-3 border border-gray-200">
+                            <button onclick="viewFile('${sub.id}')" class="text-blue-600 underline text-xs">${sub.fileName || 'Lihat File'}</button>
+                        </td>
+                        <td class="p-3 border border-gray-200 text-xs">${sub.keterangan || '-'}</td>
+                        <td class="p-3 border border-gray-200">
+                            <input type="number" value="${sub.nilaiGuru || ''}" min="0" max="100" placeholder="0-100"
+                                class="w-16 p-1 border rounded text-sm" onchange="saveNilaiFile('${sub.id}', this.value)">
+                        </td>
+                        <td class="p-3 border border-gray-200">
+                            <button onclick="deleteFileSubmission('${sub.id}')" class="text-red-500 hover:text-red-700 text-xs"><i class="fas fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                }
             });
         }
 
@@ -1152,12 +1181,83 @@
             showNotif('✅ Nilai file disimpan: ' + nilai);
         };
 
+        window.previewFileModal = (fileUrl, fileName) => {
+            const ext = fileName.split('.').pop().toLowerCase();
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-auto shadow-xl">
+                    <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+                        <h2 class="text-lg font-bold text-gray-800">${fileName}</h2>
+                        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+                    </div>
+                    <div id="preview-content" class="p-6">
+                        <div class="flex items-center justify-center h-40">
+                            <p class="text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat preview...</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            const previewContent = document.getElementById('preview-content');
+            
+            if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                previewContent.innerHTML = `
+                    <iframe src="https://docs.google.com/gview?url=${encodeURIComponent(fileUrl)}&embedded=true" 
+                            style="width:100%; height:500px; border:none;"></iframe>
+                `;
+            } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+                previewContent.innerHTML = `
+                    <div style="text-align: center;">
+                        <img src="${fileUrl}" style="max-width:100%; max-height:500px; border-radius:8px;" alt="${fileName}">
+                    </div>
+                `;
+            } else if (['txt'].includes(ext)) {
+                fetch(fileUrl)
+                    .then(r => r.text())
+                    .then(text => {
+                        previewContent.innerHTML = `<pre class="bg-gray-100 p-4 rounded overflow-auto text-sm">${text.substring(0, 5000)}</pre>`;
+                    })
+                    .catch(() => {
+                        previewContent.innerHTML = `<p class="text-red-600">Gagal memuat. <a href="${fileUrl}" download class="text-blue-600 underline">Download saja</a></p>`;
+                    });
+            } else {
+                previewContent.innerHTML = `
+                    <div class="text-center py-8">
+                        <p class="text-gray-600 mb-4">Format file ${ext.toUpperCase()} tidak didukung preview.</p>
+                        <a href="${fileUrl}" download class="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            <i class="fas fa-download"></i> Download File
+                        </a>
+                    </div>
+                `;
+            }
+        };
+
+        window.deleteFileRow = async (id) => {
+            if (!confirm('Hapus file submission ini?')) return;
+            try {
+                const appId = "edu-exam-2026";
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'file_submissions', id));
+                await loadFileSubmissions();
+                showNotif('✅ File berhasil dihapus.');
+            } catch (e) {
+                console.error(e);
+                alert('Gagal menghapus: ' + e.message);
+            }
+        };
+
         window.deleteFileSubmission = async (id) => {
             if (!confirm('Hapus file ini permanen?')) return;
             const appId = "edu-exam-2026";
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'file_submissions', id));
-            await loadFileSubmissions();
-            showNotif('✅ File berhasil dihapus.');
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'file_submissions', id));
+                await loadFileSubmissions();
+                showNotif('✅ File berhasil dihapus.');
+            } catch(e) {
+                console.error(e);
+                alert('Gagal menghapus: ' + e.message);
+            }
         };
 
         window.viewFile = (id) => {
@@ -1451,7 +1551,7 @@
                 <div id="submissions-view" class="view-section hidden space-y-4">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border overflow-hidden">
                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3">
-                            <h2 class="text-xl font-bold">Evaluasi Hasil Kerja Murid</h2>
+                            <h2 class="text-xl font-bold">Monitor & Evaluasi Murid</h2>
                             <div class="flex flex-wrap gap-2">
                                 <input type="date" id="filter-date" onchange="applyDateFilter()" class="p-2 border rounded-lg text-sm">
                                 <button onclick="openSearchModal()" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-gray-200">
