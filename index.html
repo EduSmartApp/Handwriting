@@ -973,54 +973,88 @@
             }
         };
 
-        // --- HANDLE FILE CAPTURE ---
-        let selectedFileObj = null;
+        // --- HANDLE FILE CAPTURE (Multi-file carousel) ---
+        let selectedFiles = []; // array of File objects
 
-        window.handleFileCapture = (input, type) => {
+        window.handleFileCapture = (input) => {
             if (!input.files.length) return;
             const file = input.files[0];
-            selectedFileObj = file;
-            // Set ke murid-file-input supaya submitFileUpload bisa baca
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            document.getElementById('murid-file-input').files = dt.files;
+            selectedFiles.push(file);
+            renderFileCarousel();
+            input.value = ''; // reset agar bisa pilih file sama lagi
+        };
 
-            const preview = document.getElementById('file-preview-area');
-            const url = URL.createObjectURL(file);
-            let html = '';
-            if (file.type.startsWith('image/')) {
-                html = `<img src="${url}" class="max-h-52 rounded-xl mx-auto object-contain">`;
-            } else if (file.type.startsWith('video/')) {
-                html = `<video src="${url}" controls class="max-h-52 w-full rounded-xl"></video>`;
-            } else {
-                html = `<div class="p-4 bg-gray-600 rounded-xl text-center">
-                    <i class="fas fa-file text-4xl text-yellow-400 mb-2 block"></i>
-                    <p class="text-white text-sm font-medium">${file.name}</p>
-                    <p class="text-gray-400 text-xs">${(file.size/1024).toFixed(1)} KB</p>
-                </div>`;
+        function renderFileCarousel() {
+            const track = document.getElementById('file-carousel-track');
+            const carousel = document.getElementById('file-carousel');
+            const placeholder = document.getElementById('upload-placeholder');
+            const addMore = document.getElementById('add-more-btn-area');
+            const submitBtn = document.getElementById('btn-submit-file');
+
+            track.innerHTML = '';
+
+            if (selectedFiles.length === 0) {
+                carousel.classList.add('hidden');
+                placeholder.classList.remove('hidden');
+                addMore.classList.add('hidden');
+                submitBtn.classList.add('hidden');
+                return;
             }
-            preview.innerHTML = html;
-            preview.classList.remove('hidden');
-            document.getElementById('upload-placeholder').classList.add('hidden');
-            document.getElementById('file-confirm-area').classList.remove('hidden');
-            document.getElementById('btn-submit-file').classList.add('hidden');
+
+            // Sembunyikan placeholder, tampilkan carousel & tombol tambah
+            placeholder.classList.add('hidden');
+            carousel.classList.remove('hidden');
+            addMore.classList.remove('hidden');
+            submitBtn.classList.remove('hidden');
+
+            selectedFiles.forEach((file, idx) => {
+                const url = URL.createObjectURL(file);
+                const card = document.createElement('div');
+                card.className = 'relative flex-shrink-0 rounded-xl overflow-hidden bg-gray-600';
+                card.style.cssText = 'width:140px;min-width:140px;scroll-snap-align:start;';
+
+                let mediaHtml = '';
+                if (file.type.startsWith('image/')) {
+                    mediaHtml = `<img src="${url}" class="w-full object-cover" style="height:120px;">`;
+                } else if (file.type.startsWith('video/')) {
+                    mediaHtml = `<video src="${url}" class="w-full object-cover" style="height:120px;" muted playsinline></video>`;
+                } else {
+                    mediaHtml = `<div class="flex flex-col items-center justify-center" style="height:120px;">
+                        <i class="fas fa-file text-3xl text-yellow-400 mb-1"></i>
+                        <p class="text-white text-xs text-center px-2 truncate w-full">${file.name}</p>
+                    </div>`;
+                }
+
+                card.innerHTML = `
+                    ${mediaHtml}
+                    <div class="p-1">
+                        <p class="text-white text-xs truncate">${file.name}</p>
+                        <p class="text-gray-400 text-xs">${(file.size/1024).toFixed(0)} KB</p>
+                    </div>
+                    <button onclick="hapusFile(${idx})"
+                        class="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg"
+                        style="font-size:11px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                track.appendChild(card);
+            });
+        }
+
+        window.hapusFile = (idx) => {
+            selectedFiles.splice(idx, 1);
+            renderFileCarousel();
         };
 
+        // Hapus fungsi lama yang tidak dipakai lagi
         window.batalFile = () => {
-            selectedFileObj = null;
-            document.getElementById('file-preview-area').innerHTML = '';
-            document.getElementById('file-preview-area').classList.add('hidden');
-            document.getElementById('upload-placeholder').classList.remove('hidden');
-            document.getElementById('file-confirm-area').classList.add('hidden');
-            document.getElementById('btn-submit-file').classList.add('hidden');
+            selectedFiles = [];
+            renderFileCarousel();
         };
-
-        window.konfirmasiFile = () => {
-            document.getElementById('file-confirm-area').classList.add('hidden');
-            document.getElementById('btn-submit-file').classList.remove('hidden');
-        };
+        window.konfirmasiFile = () => {};
+        // --- UPLOAD FILE MURID (Multi-file) ---
         window.submitFileUpload = async () => {
-            const fileInput = document.getElementById('murid-file-input');
+            if (selectedFiles.length === 0) return alert('Pilih file terlebih dahulu!');
             const keterangan = document.getElementById('murid-keterangan').value.trim();
             const subject = document.getElementById('murid-subject').value.trim();
             const teacherId = localStorage.getItem('targetTeacherId');
@@ -1028,64 +1062,47 @@
             const studentEmail = localStorage.getItem('studentEmail') || '';
             const studentKelas = localStorage.getItem('studentKelas') || '';
 
-            if (!fileInput.files.length) return alert('Pilih file terlebih dahulu!');
-            const file = fileInput.files[0];
-
             const btn = document.getElementById('btn-submit-file');
-            btn.innerText = 'Mengupload...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengupload...';
             btn.disabled = true;
 
             try {
-                // Konversi file ke base64 untuk disimpan (max 1MB)
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    const base64 = e.target.result;
-                    const appId = "edu-exam-2026";
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'file_submissions'), {
-                        teacherId: teacherId,
-                        studentName: studentName,
-                        studentEmail: studentEmail,
-                        studentKelas: studentKelas,
-                        subject: subject,
-                        keterangan: keterangan,
-                        fileName: file.name,
-                        fileType: file.type,
-                        fileData: base64,
-                        timestamp: serverTimestamp(),
-                        dateStr: new Date().toISOString().split('T')[0],
-                        timeStr: new Date().toLocaleTimeString(),
-                        nilaiGuru: '',
-                        status: 'uploaded'
+                const appId = "edu-exam-2026";
+                for (const file of selectedFiles) {
+                    await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            try {
+                                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'file_submissions'), {
+                                    teacherId, studentName, studentEmail, studentKelas,
+                                    subject, keterangan,
+                                    fileName: file.name,
+                                    fileType: file.type,
+                                    fileData: e.target.result,
+                                    timestamp: serverTimestamp(),
+                                    dateStr: new Date().toISOString().split('T')[0],
+                                    timeStr: new Date().toLocaleTimeString(),
+                                    nilaiGuru: '', status: 'uploaded'
+                                });
+                                resolve();
+                            } catch(err) { reject(err); }
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
                     });
-                    alert('File berhasil diupload! Guru akan memeriksa file Anda.');
-                    document.getElementById('upload-file-screen').classList.add('hidden');
-                };
-                reader.readAsDataURL(file);
+                }
+                alert('✅ ' + selectedFiles.length + ' file berhasil diupload!');
+                selectedFiles = [];
+                renderFileCarousel();
+                document.getElementById('upload-file-screen').classList.add('hidden');
+                document.getElementById('login-screen').classList.remove('hidden');
             } catch(e) {
                 console.error(e);
                 alert('Gagal upload: ' + e.message);
             } finally {
-                btn.innerText = 'Kirim File';
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i> Kirim File';
                 btn.disabled = false;
             }
-        };
-
-        window.previewFile = () => {
-            const fileInput = document.getElementById('murid-file-input');
-            const preview = document.getElementById('file-preview-area');
-            if (!fileInput.files.length) return;
-            const file = fileInput.files[0];
-            const url = URL.createObjectURL(file);
-            let html = '';
-            if (file.type.startsWith('image/')) {
-                html = `<img src="${url}" class="max-h-48 rounded-xl mx-auto">`;
-            } else if (file.type.startsWith('video/')) {
-                html = `<video src="${url}" controls class="max-h-48 w-full rounded-xl"></video>`;
-            } else {
-                html = `<div class="p-4 bg-gray-100 rounded-xl text-center"><i class="fas fa-file text-4xl text-gray-400 mb-2"></i><p class="text-sm font-medium">${file.name}</p></div>`;
-            }
-            preview.innerHTML = html;
-            preview.classList.remove('hidden');
         };
 
         // --- LOAD FILE SUBMISSIONS (untuk tabel file murid) ---
@@ -1109,9 +1126,9 @@
                 tr.className = 'border-b hover:bg-gray-50';
                 tr.innerHTML = `
                     <td class="p-3 border border-gray-200 font-medium">${sub.studentName || '-'}</td>
+                    <td class="p-3 border border-gray-200">${sub.studentKelas || '-'}</td>
                     <td class="p-3 border border-gray-200 text-xs">${sub.studentEmail || '-'}</td>
                     <td class="p-3 border border-gray-200">${sub.subject || '-'}</td>
-                    <td class="p-3 border border-gray-200">${sub.studentKelas || '-'}</td>
                     <td class="p-3 border border-gray-200 text-sm">${sub.dateStr || ''}<br><span class="text-xs text-gray-400">${sub.timeStr || ''}</span></td>
                     <td class="p-3 border border-gray-200">
                         ${sub.fileData ? `<button onclick="viewFile('${sub.id}')" class="text-blue-600 underline text-xs">${sub.fileName || 'Lihat File'}</button>` : '-'}
@@ -1504,9 +1521,9 @@
                                     <thead class="bg-gray-100 text-gray-800 text-xs uppercase font-bold border border-gray-200">
                                         <tr>
                                             <th class="p-3 border border-gray-200">Nama Murid</th>
+                                            <th class="p-3 border border-gray-200">Kelas/Semester</th>
                                             <th class="p-3 border border-gray-200">Email</th>
                                             <th class="p-3 border border-gray-200">Mata Pelajaran</th>
-                                            <th class="p-3 border border-gray-200">Kelas/Semester</th>
                                             <th class="p-3 border border-gray-200">Waktu Pengerjaan</th>
                                             <th class="p-3 border border-gray-200">File</th>
                                             <th class="p-3 border border-gray-200">Keterangan</th>
@@ -1578,44 +1595,54 @@
                 <!-- Area Upload File -->
                 <div>
                     <label class="text-gray-300 text-xs font-semibold uppercase mb-1 block">File / Foto / Video</label>
-                    <div class="border-2 border-dashed border-gray-500 rounded-2xl p-6 text-center bg-gray-700 relative">
-                        <div id="file-preview-area" class="hidden mb-3"></div>
+                    <div class="border-2 border-dashed border-gray-500 rounded-2xl p-4 bg-gray-700 relative">
+
+                        <!-- Carousel preview file yang sudah dipilih -->
+                        <div id="file-carousel" class="hidden mb-3">
+                            <div id="file-carousel-track" class="flex gap-3 overflow-x-auto pb-2" style="scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;"></div>
+                        </div>
+
+                        <!-- Placeholder awal (hilang setelah ada file) -->
                         <div id="upload-placeholder">
-                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
-                            <p class="text-gray-400 text-sm mb-4">Pilih cara upload file</p>
+                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block text-center"></i>
+                            <p class="text-gray-400 text-sm mb-4 text-center">Pilih cara upload file</p>
                             <div class="grid grid-cols-3 gap-2">
-                                <!-- Kamera -->
                                 <label class="flex flex-col items-center gap-1 bg-gray-600 hover:bg-gray-500 rounded-xl p-3 cursor-pointer transition-all">
                                     <i class="fas fa-video text-blue-400 text-xl"></i>
                                     <span class="text-xs text-gray-300">Kamera</span>
-                                    <input type="file" accept="video/*" capture="environment" class="hidden" onchange="handleFileCapture(this, 'video')">
+                                    <input type="file" accept="video/*" capture="environment" class="hidden" onchange="handleFileCapture(this)">
                                 </label>
-                                <!-- Foto -->
                                 <label class="flex flex-col items-center gap-1 bg-gray-600 hover:bg-gray-500 rounded-xl p-3 cursor-pointer transition-all">
                                     <i class="fas fa-camera text-green-400 text-xl"></i>
                                     <span class="text-xs text-gray-300">Foto</span>
-                                    <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleFileCapture(this, 'image')">
+                                    <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleFileCapture(this)">
                                 </label>
-                                <!-- File -->
                                 <label class="flex flex-col items-center gap-1 bg-gray-600 hover:bg-gray-500 rounded-xl p-3 cursor-pointer transition-all">
                                     <i class="fas fa-folder-open text-yellow-400 text-xl"></i>
                                     <span class="text-xs text-gray-300">File</span>
-                                    <input type="file" accept="*/*" class="hidden" id="murid-file-input" onchange="handleFileCapture(this, 'file')">
+                                    <input type="file" accept="*/*" class="hidden" onchange="handleFileCapture(this)">
                                 </label>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Tombol konfirmasi setelah file dipilih (tersembunyi awalnya) -->
-                <div id="file-confirm-area" class="hidden space-y-3">
-                    <div class="flex gap-3">
-                        <button onclick="batalFile()" class="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700">
-                            <i class="fas fa-times"></i> Ulangi
-                        </button>
-                        <button onclick="konfirmasiFile()" class="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700">
-                            <i class="fas fa-check"></i> Gunakan
-                        </button>
+                        <!-- Tombol tambah file (muncul setelah ada file) -->
+                        <div id="add-more-btn-area" class="hidden mt-2 flex justify-center">
+                            <div class="flex gap-3">
+                                <label class="flex items-center gap-2 bg-gray-600 hover:bg-gray-500 text-white text-sm px-4 py-2 rounded-xl cursor-pointer transition-all">
+                                    <i class="fas fa-video text-blue-400"></i>
+                                    <input type="file" accept="video/*" capture="environment" class="hidden" onchange="handleFileCapture(this)">
+                                </label>
+                                <label class="flex items-center gap-2 bg-gray-600 hover:bg-gray-500 text-white text-sm px-4 py-2 rounded-xl cursor-pointer transition-all">
+                                    <i class="fas fa-camera text-green-400"></i>
+                                    <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleFileCapture(this)">
+                                </label>
+                                <label class="flex items-center gap-2 bg-gray-600 hover:bg-gray-500 text-white text-sm px-4 py-2 rounded-xl cursor-pointer transition-all">
+                                    <i class="fas fa-folder-open text-yellow-400"></i>
+                                    <input type="file" accept="*/*" class="hidden" onchange="handleFileCapture(this)">
+                                </label>
+                                <span class="text-gray-400 text-xs self-center">+ Tambah File</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
