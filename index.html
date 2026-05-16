@@ -1398,75 +1398,101 @@
             });
         }
 
-        // Fungsi untuk membuka halaman "Periksa" semua file dalam 1 sesi upload (tanpa download)
-        window.periksaSemuaFile = (subId) => {
-            const sub = allFileSubmissionsCache.find(s => s.id === subId);
-            if (!sub) return alert('Data tidak ditemukan.');
+        // State untuk file aktif yang sedang diperiksa
+        let _periksaFiles = [];
 
-            // Kumpulkan semua file dari dokumen ini
-            const allFiles = [];
-            if (sub.filesArray && Array.isArray(sub.filesArray)) {
-                sub.filesArray.forEach(f => allFiles.push({ name: f.name, type: f.type, data: f.data, url: null }));
+        window.switchPeriksaTab = function(idx) {
+            for (var i = 0; i < _periksaFiles.length; i++) {
+                var btn = document.getElementById('periksa-tab-btn-' + i);
+                if (!btn) continue;
+                if (i === idx) {
+                    btn.style.background = '#4f46e5';
+                    btn.style.color = 'white';
+                    btn.style.borderColor = '#4f46e5';
+                } else {
+                    btn.style.background = 'white';
+                    btn.style.color = '#374151';
+                    btn.style.borderColor = '#d1d5db';
+                }
+            }
+            var area = document.getElementById('periksa-preview-area');
+            if (area) renderPeriksaFile(_periksaFiles, idx, area);
+        };
+
+        window.tutupPeriksaModal = function() {
+            var m = document.getElementById('periksa-modal-overlay');
+            if (m) m.remove();
+        };
+
+        // Fungsi untuk membuka modal "Periksa" semua file dalam 1 sesi upload
+        window.periksaSemuaFile = function(subId) {
+            var sub = null;
+            for (var i = 0; i < allFileSubmissionsCache.length; i++) {
+                if (allFileSubmissionsCache[i].id === subId) { sub = allFileSubmissionsCache[i]; break; }
+            }
+            if (!sub) { alert('Data tidak ditemukan.'); return; }
+
+            var allFiles = [];
+            if (sub.filesArray && Array.isArray(sub.filesArray) && sub.filesArray.length > 0) {
+                for (var j = 0; j < sub.filesArray.length; j++) {
+                    var ff = sub.filesArray[j];
+                    allFiles.push({ name: ff.name, type: ff.type, data: ff.data, url: null });
+                }
             } else if (sub.fileData) {
-                allFiles.push({ name: sub.fileName, type: sub.fileType, data: sub.fileData, url: null });
+                allFiles.push({ name: sub.fileName || 'File', type: sub.fileType, data: sub.fileData, url: null });
             } else if (sub.files && Array.isArray(sub.files)) {
-                sub.files.forEach(f => allFiles.push({ name: f.name, type: null, data: null, url: f.url }));
+                for (var k = 0; k < sub.files.length; k++) {
+                    allFiles.push({ name: sub.files[k].name, type: null, data: null, url: sub.files[k].url });
+                }
             }
 
-            if (allFiles.length === 0) return alert('Tidak ada file yang bisa diperiksa.');
+            if (allFiles.length === 0) { alert('Tidak ada file yang bisa diperiksa.'); return; }
 
-            const namaInfo = `${sub.studentName || '-'} — ${sub.subject || ''}${sub.keterangan ? ' | ' + sub.keterangan : ''}`;
+            _periksaFiles = allFiles;
 
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4';
-            modal.style.backdropFilter = 'blur(4px)';
+            var namaInfo = (sub.studentName || '-') + ' — ' + (sub.subject || '') + (sub.keterangan ? ' | ' + sub.keterangan : '');
 
-            // Tab navigation jika lebih dari 1 file
-            const tabsHtml = allFiles.length > 1 ? `
-                <div class="flex gap-2 px-4 py-3 border-b overflow-x-auto flex-shrink-0 bg-gray-50">
-                    ${allFiles.map((f, i) => `
-                        <button onclick="switchPeriksaTab(${i})"
-                            id="periksa-tab-btn-${i}"
-                            class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${i === 0 ? 'bg-indigo-600 text-white' : 'bg-white border text-gray-600 hover:bg-indigo-50'}">
-                            ${i+1}. ${f.name.length > 20 ? f.name.substring(0,18)+'...' : f.name}
-                        </button>
-                    `).join('')}
-                </div>
-            ` : '';
+            var oldModal = document.getElementById('periksa-modal-overlay');
+            if (oldModal) oldModal.remove();
 
-            modal.innerHTML = `
-                <div class="bg-white rounded-2xl w-full max-w-5xl shadow-2xl flex flex-col" style="max-height:92vh;">
-                    <div class="flex justify-between items-center p-4 border-b flex-shrink-0 bg-white rounded-t-2xl">
-                        <div>
-                            <h2 class="text-lg font-bold text-gray-800"><i class="fas fa-folder-open text-indigo-500 mr-2"></i>${namaInfo}</h2>
-                            <p class="text-xs text-gray-400 mt-0.5">${allFiles.length} file diunggah</p>
-                        </div>
-                        <button onclick="this.closest('.fixed').remove()"
-                            class="text-gray-400 hover:text-gray-700 text-2xl font-bold leading-none">&times;</button>
-                    </div>
-                    ${tabsHtml}
-                    <div id="periksa-preview-area" class="flex-1 overflow-auto p-4"></div>
-                </div>
-            `;
-            document.body.appendChild(modal);
+            var overlay = document.createElement('div');
+            overlay.id = 'periksa-modal-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);';
 
-            // Simpan data file ke modal agar bisa diakses oleh switchPeriksaTab
-            modal._files = allFiles;
+            var modalBox = document.createElement('div');
+            modalBox.style.cssText = 'background:white;border-radius:16px;width:100%;max-width:900px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 25px 50px rgba(0,0,0,0.3);overflow:hidden;';
 
-            // Render file pertama
-            renderPeriksaFile(allFiles, 0, document.getElementById('periksa-preview-area'));
+            var header = document.createElement('div');
+            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #e5e7eb;flex-shrink:0;';
+            header.innerHTML = '<div><p style="font-weight:700;font-size:15px;color:#1f2937;"><i class=\'fas fa-folder-open\' style=\'color:#6366f1;margin-right:8px;\'></i>' + namaInfo + '</p><p style="font-size:11px;color:#9ca3af;margin-top:2px;">' + allFiles.length + ' file diunggah</p></div><button onclick=\'tutupPeriksaModal()\' style=\'font-size:24px;color:#9ca3af;background:none;border:none;cursor:pointer;line-height:1;padding:0 4px;\'>&times;</button>';
+            modalBox.appendChild(header);
 
-            // Fungsi switch tab
-            window.switchPeriksaTab = (idx) => {
-                document.querySelectorAll('[id^="periksa-tab-btn-"]').forEach((btn, i) => {
-                    if (i === idx) {
-                        btn.className = btn.className.replace('bg-white border text-gray-600 hover:bg-indigo-50', 'bg-indigo-600 text-white');
-                    } else {
-                        btn.className = btn.className.replace('bg-indigo-600 text-white', 'bg-white border text-gray-600 hover:bg-indigo-50');
-                    }
-                });
-                renderPeriksaFile(allFiles, idx, document.getElementById('periksa-preview-area'));
-            };
+            if (allFiles.length > 1) {
+                var tabBar = document.createElement('div');
+                tabBar.style.cssText = 'display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid #e5e7eb;overflow-x:auto;flex-shrink:0;background:#f9fafb;';
+                for (var t = 0; t < allFiles.length; t++) {
+                    var tabBtn = document.createElement('button');
+                    tabBtn.id = 'periksa-tab-btn-' + t;
+                    var shortName = allFiles[t].name.length > 22 ? allFiles[t].name.substring(0,20) + '...' : allFiles[t].name;
+                    tabBtn.textContent = (t+1) + '. ' + shortName;
+                    tabBtn.style.cssText = 'padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;border:1px solid #d1d5db;transition:all 0.15s;';
+                    if (t === 0) { tabBtn.style.background = '#4f46e5'; tabBtn.style.color = 'white'; tabBtn.style.borderColor = '#4f46e5'; }
+                    else { tabBtn.style.background = 'white'; tabBtn.style.color = '#374151'; }
+                    tabBtn.setAttribute('onclick', 'switchPeriksaTab(' + t + ')');
+                    tabBar.appendChild(tabBtn);
+                }
+                modalBox.appendChild(tabBar);
+            }
+
+            var previewArea = document.createElement('div');
+            previewArea.id = 'periksa-preview-area';
+            previewArea.style.cssText = 'flex:1;overflow:auto;padding:16px;min-height:200px;';
+            modalBox.appendChild(previewArea);
+
+            overlay.appendChild(modalBox);
+            document.body.appendChild(overlay);
+
+            setTimeout(function() { renderPeriksaFile(allFiles, 0, previewArea); }, 0);
         };
 
         function renderPeriksaFile(allFiles, idx, container) {
